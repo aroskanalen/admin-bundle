@@ -73,23 +73,33 @@ angular.module('mainModule').service('searchService', ['$q', '$http', 'busServic
       // Try to connect to the server if not already connected.
       var deferred = $q.defer();
 
+      function auth(deferred, retryCounter) {
+        $http.get('api/auth/search')
+          .success(function (data) {
+            token = data.token;
+            getSocket(deferred);
+          })
+          .error(function (data, status) {
+            // Retry if more attempts remain.
+            if (retryCounter > 0) {
+              auth(deferred, retryCounter - 1);
+            }
+            else {
+              busService.$emit('log.error', {
+                'cause': status,
+                'msg': 'Authentication (search) to search node failed (' + status + '): ' + data
+              });
+              deferred.reject(status);
+            }
+          });
+      }
+
       if (socket === undefined) {
         if (token !== null) {
           getSocket(deferred);
         }
         else {
-          $http.get('api/auth/search')
-            .success(function (data) {
-              token = data.token;
-              getSocket(deferred);
-            })
-            .error(function (data, status) {
-              busService.$emit('log.error', {
-                'cause': status,
-                'msg': 'Authentication (search) to search node failed (' + status + ')'
-              });
-              deferred.reject(status);
-            });
+          auth(deferred, 3);
         }
       }
       else {
